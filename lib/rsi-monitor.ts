@@ -9,7 +9,7 @@ import { sendAlert } from "./telegram";
 
 const SYMBOLS = ["MNQ"];
 const RSI_PERIOD = 13;
-const OVERBOUGHT = 75;
+const OVERBOUGHT = 70;
 const OVERSOLD = 30;
 const BAR_UNIT = 2; // minute
 const BAR_UNIT_NUMBER = 1; // 1-minute
@@ -88,7 +88,7 @@ export async function checkRsi(): Promise<{ checkedAt: string; results: SymbolCh
       if (cross) {
         const msg =
           cross === "overbought"
-            ? `🔴 ${symbol} RSI crossed ABOVE 75 (overbought)\nRSI = ${rsi.toFixed(1)} on the 1-minute chart.`
+            ? `🔴 ${symbol} RSI crossed ABOVE 70 (overbought)\nRSI = ${rsi.toFixed(1)} on the 1-minute chart.`
             : `🟢 ${symbol} RSI crossed BELOW 30 (oversold)\nRSI = ${rsi.toFixed(1)} on the 1-minute chart.`;
         const sent = await sendAlert(msg);
         alerted = sent.sent > 0;
