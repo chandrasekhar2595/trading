@@ -19,6 +19,7 @@ export interface SendResult {
   sent: number;
   skipped: boolean;
   reason?: string;
+  errors?: string[];
 }
 
 export async function sendAlert(text: string): Promise<SendResult> {
@@ -29,6 +30,7 @@ export async function sendAlert(text: string): Promise<SendResult> {
   if (ids.length === 0) return { sent: 0, skipped: true, reason: "no registered chat IDs" };
 
   let sent = 0;
+  const errors: string[] = [];
   await Promise.all(
     ids.map(async (chatId) => {
       try {
@@ -37,13 +39,15 @@ export async function sendAlert(text: string): Promise<SendResult> {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ chat_id: chatId, text, disable_notification: false }),
         });
-        if (res.ok) sent += 1;
-      } catch {
-        /* ignore individual failures */
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) sent += 1;
+        else errors.push(`${chatId}: ${data.error_code ?? res.status} ${data.description ?? "send failed"}`);
+      } catch (e) {
+        errors.push(`${chatId}: ${e instanceof Error ? e.message : "network error"}`);
       }
     })
   );
-  return { sent, skipped: false };
+  return { sent, skipped: false, errors: errors.length ? errors : undefined };
 }
 
 export interface ChatRef {

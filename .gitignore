@@ -9,3 +9,4 @@
 .vercel
 next-env.d.ts
 /.data
+.env*
