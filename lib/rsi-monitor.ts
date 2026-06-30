@@ -88,8 +88,8 @@ export async function checkRsi(): Promise<{ checkedAt: string; results: SymbolCh
       if (cross) {
         const msg =
           cross === "overbought"
-            ? `📈 ${symbol} RSI crossed ABOVE 75 — overbought (RSI ${rsi.toFixed(1)}, 1m).`
-            : `📉 ${symbol} RSI crossed BELOW 30 — oversold (RSI ${rsi.toFixed(1)}, 1m).`;
+            ? `🔴 ${symbol} RSI crossed ABOVE 75 (overbought)\nRSI = ${rsi.toFixed(1)} on the 1-minute chart.`
+            : `🟢 ${symbol} RSI crossed BELOW 30 (oversold)\nRSI = ${rsi.toFixed(1)} on the 1-minute chart.`;
         const sent = await sendAlert(msg);
         alerted = sent.sent > 0;
         if (!alerted && sent.reason) {
