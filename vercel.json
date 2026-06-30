@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/rsi-check",
+      "schedule": "* * * * *"
+    }
+  ]
+}
