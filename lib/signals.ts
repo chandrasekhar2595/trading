@@ -22,6 +22,11 @@ export interface Signal {
   priorHourHigh: number;
   priorHourLow: number;
   reason: string;
+  /** Exit guidance: whether an open long/short should be closed now, and why. */
+  closeLong: boolean;
+  closeLongReason: string;
+  closeShort: boolean;
+  closeShortReason: string;
 }
 
 const RSI_PERIOD = 13;
@@ -81,6 +86,21 @@ export function computeSignal(bars5m: Bar[], bars15m: Bar[], barsHourly: Bar[]):
     }
   }
 
+  // ── Exit guidance ──
+  // Close a LONG when the reason to be long is gone: trend flips down, momentum
+  // exhausts (RSI overbought), price loses VWAP, or it breaks the prior-hour low.
+  let closeLongReason = "";
+  if (trend === "down") closeLongReason = "Trend flipped down — exit longs.";
+  else if (rsi >= 70) closeLongReason = `RSI ${rsi.toFixed(0)} overbought — take profit on longs.`;
+  else if (price < priorHourLow) closeLongReason = `Broke prior-hour low (${priorHourLow.toFixed(0)}) — stop the long.`;
+  else if (price < vwap) closeLongReason = "Price lost VWAP — long momentum fading.";
+
+  let closeShortReason = "";
+  if (trend === "up") closeShortReason = "Trend flipped up — cover shorts.";
+  else if (rsi <= 30) closeShortReason = `RSI ${rsi.toFixed(0)} oversold — take profit on shorts.`;
+  else if (price > priorHourHigh) closeShortReason = `Broke prior-hour high (${priorHourHigh.toFixed(0)}) — stop the short.`;
+  else if (price > vwap) closeShortReason = "Price reclaimed VWAP — short momentum fading.";
+
   return {
     direction,
     type,
@@ -91,6 +111,10 @@ export function computeSignal(bars5m: Bar[], bars15m: Bar[], barsHourly: Bar[]):
     priorHourHigh: round2(priorHourHigh),
     priorHourLow: round2(priorHourLow),
     reason,
+    closeLong: closeLongReason !== "",
+    closeLongReason,
+    closeShort: closeShortReason !== "",
+    closeShortReason,
   };
 }
 

@@ -175,7 +175,7 @@ export default function Dashboard() {
 
           {signal?.signal && (
             <section className="mt-4 grid gap-4 lg:grid-cols-2">
-              <SignalCard data={signal} />
+              <SignalCard data={signal} position={mnqPositionSide(view.positions)} />
               <BestHours hours={signal.bestHours} personal={view.hourlyPerformance} />
             </section>
           )}
@@ -388,32 +388,60 @@ function DailyLossCard({ snap }: { snap: Snapshot }) {
   );
 }
 
-function SignalCard({ data }: { data: MarketSignal }) {
+function mnqPositionSide(positions: PositionView[]): "Long" | "Short" | null {
+  const p = positions.find((x) => x.contractId.includes(".MNQ."));
+  return p ? (p.side as "Long" | "Short") : null;
+}
+
+function SignalCard({ data, position }: { data: MarketSignal; position: "Long" | "Short" | null }) {
   const s = data.signal;
-  const tone =
-    s.direction === "BUY"
-      ? { badge: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40", ring: "border-emerald-500/30" }
-      : s.direction === "SELL"
-        ? { badge: "bg-red-500/15 text-red-300 border-red-500/40", ring: "border-red-500/30" }
-        : { badge: "bg-zinc-700/30 text-zinc-300 border-zinc-600/40", ring: "border-zinc-800" };
   const trendIcon = s.trend === "up" ? "↑ uptrend" : s.trend === "down" ? "↓ downtrend" : "→ choppy";
+
+  // When holding MNQ, the card is about the EXIT; when flat, it's about the entry.
+  let badge: string;
+  let ring: string;
+  let headline: string;
+  let sub: string;
+  if (position === "Long") {
+    const close = s.closeLong;
+    badge = close ? "bg-red-500/15 text-red-300 border-red-500/40" : "bg-emerald-500/15 text-emerald-300 border-emerald-500/40";
+    ring = close ? "border-red-500/40" : "border-emerald-500/30";
+    headline = close ? "CLOSE LONG" : "HOLD LONG";
+    sub = close ? s.closeLongReason : "Long thesis intact — trend up, momentum holding.";
+  } else if (position === "Short") {
+    const close = s.closeShort;
+    badge = close ? "bg-red-500/15 text-red-300 border-red-500/40" : "bg-emerald-500/15 text-emerald-300 border-emerald-500/40";
+    ring = close ? "border-red-500/40" : "border-emerald-500/30";
+    headline = close ? "CLOSE SHORT" : "HOLD SHORT";
+    sub = close ? s.closeShortReason : "Short thesis intact — trend down, momentum holding.";
+  } else {
+    badge =
+      s.direction === "BUY"
+        ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+        : s.direction === "SELL"
+          ? "bg-red-500/15 text-red-300 border-red-500/40"
+          : "bg-zinc-700/30 text-zinc-300 border-zinc-600/40";
+    ring =
+      s.direction === "BUY" ? "border-emerald-500/30" : s.direction === "SELL" ? "border-red-500/30" : "border-zinc-800";
+    headline = s.direction;
+    sub = s.reason;
+  }
+
   return (
-    <Card className={`border ${tone.ring}`}>
+    <Card className={`border ${ring}`}>
       <div className="flex items-center justify-between">
-        <CardTitle>MNQ signal</CardTitle>
+        <CardTitle>MNQ signal {position ? `· holding ${position.toLowerCase()}` : "· entry"}</CardTitle>
         <span className="text-xs text-zinc-500">
           {trendIcon} · {s.type !== "none" ? s.type : "no setup"}
         </span>
       </div>
       <div className="mt-1 flex items-center gap-3">
-        <span className={`rounded-lg border px-3 py-1.5 text-2xl font-bold ${tone.badge}`}>
-          {s.direction}
-        </span>
+        <span className={`rounded-lg border px-3 py-1.5 text-2xl font-bold ${badge}`}>{headline}</span>
         <span className="text-sm text-zinc-400">
           {s.price.toLocaleString()} · RSI {s.rsi}
         </span>
       </div>
-      <p className="mt-3 text-sm text-zinc-300">{s.reason}</p>
+      <p className="mt-3 text-sm text-zinc-300">{sub}</p>
       <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
         <Mini label="VWAP" value={s.vwap.toLocaleString()} />
         <Mini label="Prior hr high" value={s.priorHourHigh.toLocaleString()} />
