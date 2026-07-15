@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COMBINE_CONFIGS, evaluate, type AccountSize, type EngineResult } from "@/lib/rules";
 import type { AccountListItem, PositionView, RealtimeInfo } from "@/lib/account-snapshot";
 import { useRealtime, type RealtimeStatus } from "@/lib/use-realtime";
+import type { MarketSignal } from "@/lib/market-signal";
 
 interface Snapshot {
   source: "live" | "demo";
@@ -40,6 +41,7 @@ export default function Dashboard() {
   const [accounts, setAccounts] = useState<AccountListItem[]>([]);
   const [accountId, setAccountId] = useState<number | null>(null);
   const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [signal, setSignal] = useState<MarketSignal | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   // Monotonic request id: only the latest request is allowed to write state, so a
@@ -95,6 +97,18 @@ export default function Dashboard() {
     const ping = () => fetch("/api/rsi-check", { cache: "no-store" }).catch(() => {});
     ping();
     const id = setInterval(ping, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // MNQ buy/sell signal + best-hours, refreshed every 30s.
+  useEffect(() => {
+    const loadSignal = () =>
+      fetch("/api/signal", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => (d?.signal ? setSignal(d) : null))
+        .catch(() => {});
+    loadSignal();
+    const id = setInterval(loadSignal, 30_000);
     return () => clearInterval(id);
   }, []);
 
@@ -157,6 +171,13 @@ export default function Dashboard() {
           {view.result.dailyLimitActive && <DailyLossCard snap={view} />}
 
           <Playbook snap={view} />
+
+          {signal?.signal && (
+            <section className="mt-4 grid gap-4 lg:grid-cols-2">
+              <SignalCard data={signal} />
+              <BestHours hours={signal.bestHours} />
+            </section>
+          )}
 
           <section className="mt-4 grid gap-4 lg:grid-cols-2">
             <Positions snap={view} prices={rt.priceByContract} />
@@ -362,6 +383,92 @@ function DailyLossCard({ snap }: { snap: Snapshot }) {
           ⛔ Stop trading — you&apos;re about to hit the daily loss limit and fail the account.
         </p>
       )}
+    </Card>
+  );
+}
+
+function SignalCard({ data }: { data: MarketSignal }) {
+  const s = data.signal;
+  const tone =
+    s.direction === "BUY"
+      ? { badge: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40", ring: "border-emerald-500/30" }
+      : s.direction === "SELL"
+        ? { badge: "bg-red-500/15 text-red-300 border-red-500/40", ring: "border-red-500/30" }
+        : { badge: "bg-zinc-700/30 text-zinc-300 border-zinc-600/40", ring: "border-zinc-800" };
+  const trendIcon = s.trend === "up" ? "↑ uptrend" : s.trend === "down" ? "↓ downtrend" : "→ choppy";
+  return (
+    <Card className={`border ${tone.ring}`}>
+      <div className="flex items-center justify-between">
+        <CardTitle>MNQ signal</CardTitle>
+        <span className="text-xs text-zinc-500">
+          {trendIcon} · {s.type !== "none" ? s.type : "no setup"}
+        </span>
+      </div>
+      <div className="mt-1 flex items-center gap-3">
+        <span className={`rounded-lg border px-3 py-1.5 text-2xl font-bold ${tone.badge}`}>
+          {s.direction}
+        </span>
+        <span className="text-sm text-zinc-400">
+          {s.price.toLocaleString()} · RSI {s.rsi}
+        </span>
+      </div>
+      <p className="mt-3 text-sm text-zinc-300">{s.reason}</p>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+        <Mini label="VWAP" value={s.vwap.toLocaleString()} />
+        <Mini label="Prior hr high" value={s.priorHourHigh.toLocaleString()} />
+        <Mini label="Prior hr low" value={s.priorHourLow.toLocaleString()} />
+      </div>
+      <p className="mt-2 text-[11px] leading-snug text-zinc-500">
+        Heuristic edge, not a guarantee — always use your own stop and risk limits.
+      </p>
+    </Card>
+  );
+}
+
+function BestHours({ hours }: { hours: MarketSignal["bestHours"] }) {
+  const max = Math.max(1, ...hours.map((h) => h.avgRangeUsd));
+  const currentHour = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "2-digit", hour12: false }).format(
+      new Date()
+    )
+  );
+  const fmtHour = (h: number) => `${((h + 11) % 12) + 1}${h < 12 ? "a" : "p"}`;
+  const top = [...hours].sort((a, b) => b.avgRangeUsd - a.avgRangeUsd)[0]?.avgRangeUsd ?? 0;
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <CardTitle>Best hours to trade (CT)</CardTitle>
+        <span className="text-xs text-zinc-500">avg range · 14d</span>
+      </div>
+      <div className="mt-3 max-h-64 space-y-1 overflow-y-auto pr-1">
+        {hours.map((h) => {
+          const isTop = h.avgRangeUsd >= top * 0.8;
+          const isNow = h.hour === currentHour;
+          return (
+            <div key={h.hour} className="flex items-center gap-2 text-xs">
+              <span className={`w-8 shrink-0 tabular-nums ${isNow ? "font-bold text-sky-300" : "text-zinc-500"}`}>
+                {fmtHour(h.hour)}
+              </span>
+              <div className="relative h-3.5 flex-1 rounded bg-zinc-800/40">
+                <div
+                  className={`absolute top-0 h-3.5 rounded ${isTop ? "bg-sky-500/80" : "bg-zinc-600/70"}`}
+                  style={{ width: `${(h.avgRangeUsd / max) * 100}%` }}
+                />
+              </div>
+              <span className="w-12 shrink-0 text-right tabular-nums text-zinc-400">${h.avgRangeUsd}</span>
+              <span
+                className={`w-8 shrink-0 text-right tabular-nums ${h.avgMoveUsd > 0 ? "text-emerald-400" : h.avgMoveUsd < 0 ? "text-red-400" : "text-zinc-500"}`}
+                title="avg directional bias"
+              >
+                {h.avgMoveUsd > 0 ? "↑" : h.avgMoveUsd < 0 ? "↓" : "·"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[11px] text-zinc-500">
+        Blue = highest-volatility hours (best opportunity). ↑/↓ = typical direction.
+      </p>
     </Card>
   );
 }
