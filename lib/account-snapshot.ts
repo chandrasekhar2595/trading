@@ -113,6 +113,45 @@ export interface DailyPnl {
   trades: number;
 }
 
+export interface HourlyPerf {
+  hour: number; // CT clock hour 0-23
+  netUsd: number;
+  trades: number;
+  winRate: number; // % of closing fills that were green
+}
+
+function ctClockHour(iso: string): number {
+  return Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "2-digit", hourCycle: "h23" }).format(
+      new Date(iso)
+    )
+  );
+}
+
+/** The account's realized P&L and win-rate grouped by hour of day (CT). */
+function deriveHourlyPerformance(trades: TsTrade[]): HourlyPerf[] {
+  const byHour = new Map<number, { net: number; wins: number; n: number }>();
+  for (const t of trades) {
+    if (t.voided) continue;
+    const hour = ctClockHour(t.creationTimestamp);
+    const row = byHour.get(hour) ?? { net: 0, wins: 0, n: 0 };
+    row.net += (t.profitAndLoss ?? 0) - (t.fees ?? 0) - (t.commissions ?? 0);
+    if (t.profitAndLoss != null) {
+      row.n += 1;
+      if (t.profitAndLoss > 0) row.wins += 1;
+    }
+    byHour.set(hour, row);
+  }
+  return [...byHour.entries()]
+    .map(([hour, v]) => ({
+      hour,
+      netUsd: Math.round(v.net),
+      trades: v.n,
+      winRate: v.n ? Math.round((100 * v.wins) / v.n) : 0,
+    }))
+    .sort((a, b) => a.hour - b.hour);
+}
+
 export interface Snapshot {
   source: "live" | "demo";
   accountId: number | null;
@@ -124,6 +163,7 @@ export interface Snapshot {
   peakEquity: number;
   positions: PositionView[];
   dailyPnl: DailyPnl[];
+  hourlyPerformance: HourlyPerf[];
   result: EngineResult;
   realtime: RealtimeInfo | null;
   /** Current Topstep session day (for picking out today's P&L client-side). */
@@ -295,6 +335,7 @@ export async function getSnapshot(
       peakEquity,
       positions: viewPositions(positions, pointValues),
       dailyPnl,
+      hourlyPerformance: deriveHourlyPerformance(trades),
       currentSessionDay,
       hasDailyLossLimit,
       result,
@@ -346,6 +387,12 @@ function demoSnapshot(size: AccountSize, warning: string): Snapshot {
     peakEquity: peakRealized,
     positions,
     dailyPnl,
+    hourlyPerformance: [
+      { hour: 8, netUsd: 640, trades: 22, winRate: 59 },
+      { hour: 9, netUsd: -210, trades: 31, winRate: 42 },
+      { hour: 10, netUsd: 380, trades: 12, winRate: 67 },
+      { hour: 13, netUsd: -140, trades: 9, winRate: 44 },
+    ],
     result,
     realtime: null,
     currentSessionDay,

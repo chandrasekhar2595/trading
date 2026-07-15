@@ -16,6 +16,7 @@ interface Snapshot {
   peakEquity: number;
   positions: PositionView[];
   dailyPnl: { day: string; pnl: number; trades: number }[];
+  hourlyPerformance: { hour: number; netUsd: number; trades: number; winRate: number }[];
   realtime: RealtimeInfo | null;
   currentSessionDay: string;
   hasDailyLossLimit: boolean;
@@ -175,7 +176,7 @@ export default function Dashboard() {
           {signal?.signal && (
             <section className="mt-4 grid gap-4 lg:grid-cols-2">
               <SignalCard data={signal} />
-              <BestHours hours={signal.bestHours} />
+              <BestHours hours={signal.bestHours} personal={view.hourlyPerformance} />
             </section>
           )}
 
@@ -425,25 +426,34 @@ function SignalCard({ data }: { data: MarketSignal }) {
   );
 }
 
-function BestHours({ hours }: { hours: MarketSignal["bestHours"] }) {
+function BestHours({
+  hours,
+  personal,
+}: {
+  hours: MarketSignal["bestHours"];
+  personal: { hour: number; netUsd: number; trades: number; winRate: number }[];
+}) {
   const max = Math.max(1, ...hours.map((h) => h.avgRangeUsd));
+  const perfByHour = new Map(personal.map((p) => [p.hour, p]));
   const currentHour = Number(
-    new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "2-digit", hour12: false }).format(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "2-digit", hourCycle: "h23" }).format(
       new Date()
     )
   );
   const fmtHour = (h: number) => `${((h + 11) % 12) + 1}${h < 12 ? "a" : "p"}`;
   const top = [...hours].sort((a, b) => b.avgRangeUsd - a.avgRangeUsd)[0]?.avgRangeUsd ?? 0;
+  const hasPersonal = personal.length > 0;
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <CardTitle>Best hours to trade (CT)</CardTitle>
-        <span className="text-xs text-zinc-500">avg range · 14d</span>
+        <CardTitle>Best hours (CT)</CardTitle>
+        <span className="text-xs text-zinc-500">market range · your P&amp;L</span>
       </div>
       <div className="mt-3 max-h-64 space-y-1 overflow-y-auto pr-1">
         {hours.map((h) => {
           const isTop = h.avgRangeUsd >= top * 0.8;
           const isNow = h.hour === currentHour;
+          const p = perfByHour.get(h.hour);
           return (
             <div key={h.hour} className="flex items-center gap-2 text-xs">
               <span className={`w-8 shrink-0 tabular-nums ${isNow ? "font-bold text-sky-300" : "text-zinc-500"}`}>
@@ -455,19 +465,24 @@ function BestHours({ hours }: { hours: MarketSignal["bestHours"] }) {
                   style={{ width: `${(h.avgRangeUsd / max) * 100}%` }}
                 />
               </div>
-              <span className="w-12 shrink-0 text-right tabular-nums text-zinc-400">${h.avgRangeUsd}</span>
-              <span
-                className={`w-8 shrink-0 text-right tabular-nums ${h.avgMoveUsd > 0 ? "text-emerald-400" : h.avgMoveUsd < 0 ? "text-red-400" : "text-zinc-500"}`}
-                title="avg directional bias"
-              >
-                {h.avgMoveUsd > 0 ? "↑" : h.avgMoveUsd < 0 ? "↓" : "·"}
-              </span>
+              <span className="w-10 shrink-0 text-right tabular-nums text-zinc-400">${h.avgRangeUsd}</span>
+              {hasPersonal && (
+                <span
+                  className={`w-16 shrink-0 text-right tabular-nums ${
+                    !p ? "text-zinc-700" : p.netUsd > 0 ? "text-emerald-400" : p.netUsd < 0 ? "text-red-400" : "text-zinc-500"
+                  }`}
+                  title={p ? `${p.trades} trades, ${p.winRate}% win` : "no trades this hour"}
+                >
+                  {p ? `${p.netUsd >= 0 ? "+" : ""}$${p.netUsd}` : "—"}
+                </span>
+              )}
             </div>
           );
         })}
       </div>
       <p className="mt-2 text-[11px] text-zinc-500">
-        Blue = highest-volatility hours (best opportunity). ↑/↓ = typical direction.
+        Blue = market&apos;s most active hours.{" "}
+        {hasPersonal ? "Right column = your net P&L that hour (hover for win-rate)." : "Trade more to see your P&L by hour."}
       </p>
     </Card>
   );

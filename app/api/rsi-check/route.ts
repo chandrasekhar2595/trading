@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRsi } from "@/lib/rsi-monitor";
+import { checkSignal } from "@/lib/signal-monitor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const result = await checkRsi();
-  return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+  // Run both monitors each minute: RSI crosses and MNQ signal flips.
+  const [rsi, signal] = await Promise.all([checkRsi(), checkSignal().catch((e) => ({ error: String(e) }))]);
+  return NextResponse.json({ ...rsi, signal }, { headers: { "Cache-Control": "no-store" } });
 }
