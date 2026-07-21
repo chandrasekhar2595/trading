@@ -164,7 +164,9 @@ export default function Dashboard() {
 
       {view && (
         <>
-          <section className="mt-5 grid gap-4 md:grid-cols-2">
+          <RightNow snap={view} signal={signal} />
+
+          <section className="mt-4 grid gap-4 md:grid-cols-2">
             <BufferCard snap={view} />
             <ProgressCard snap={view} />
           </section>
@@ -385,6 +387,78 @@ function DailyLossCard({ snap }: { snap: Snapshot }) {
         </p>
       )}
     </Card>
+  );
+}
+
+/**
+ * The single "what do I do right now" instruction.
+ * Priority order matters: capital-protection gates ALWAYS override any setup.
+ * A trade setup is worthless if taking it breaks a rule that ends your account.
+ */
+function RightNow({ snap, signal }: { snap: Snapshot; signal: MarketSignal | null }) {
+  const r = snap.result;
+  const s = signal?.signal;
+  const pos = mnqPositionSide(snap.positions);
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "2-digit", hourCycle: "h23" }).format(new Date())
+  );
+  const hourPerf = snap.hourlyPerformance.find((h) => h.hour === hour);
+  const badHour = hourPerf && hourPerf.netUsd < 0 && hourPerf.trades >= 5;
+
+  type Tone = "stop" | "caution" | "go" | "wait";
+  let tone: Tone = "wait";
+  let action = "WAIT";
+  let why = "No setup and nothing to manage.";
+
+  // 1. Hard capital gates — these beat everything.
+  if (r.status === "failed") {
+    tone = "stop"; action = "STOP — ACCOUNT BREACHED";
+    why = "This account is done. Do not place another trade.";
+  } else if (r.dailyLimitActive && r.dailyUsedPct >= 0.8) {
+    tone = "stop"; action = "STOP FOR THE DAY";
+    why = `Only ${money(r.dailyRemaining)} left before the daily loss limit fails this account.`;
+  } else if (r.bufferPct < 0.2) {
+    tone = "stop"; action = "STOP — NEAR MAX LOSS";
+    why = `Only ${money(r.bufferToFloor)} to the trailing floor. One bad trade ends the Combine.`;
+  }
+  // 2. Managing an open position beats looking for a new one.
+  else if (pos === "Long") {
+    if (s?.closeLong) { tone = "caution"; action = "CLOSE YOUR LONG"; why = s.closeLongReason; }
+    else { tone = "go"; action = "HOLD YOUR LONG"; why = "Trend and momentum still support the long."; }
+  } else if (pos === "Short") {
+    if (s?.closeShort) { tone = "caution"; action = "CLOSE YOUR SHORT"; why = s.closeShortReason; }
+    else { tone = "go"; action = "HOLD YOUR SHORT"; why = "Trend and momentum still support the short."; }
+  }
+  // 3. Flat: behaviour gate (your own losing hours) before any entry.
+  else if (badHour) {
+    tone = "stop"; action = "DON'T TRADE THIS HOUR";
+    why = `You've lost ${money(Math.abs(hourPerf!.netUsd))} in this hour historically (${hourPerf!.winRate}% win, ${hourPerf!.trades} trades).`;
+  } else if (s?.direction === "BUY" || s?.direction === "SELL") {
+    tone = "go"; action = s.direction === "BUY" ? "BUY SETUP" : "SELL SETUP";
+    why = s.reason;
+  } else if (s) {
+    tone = "wait"; action = "WAIT — NO SETUP";
+    why = s.reason;
+  }
+
+  const styles: Record<Tone, string> = {
+    stop: "border-red-500/50 bg-red-500/10 text-red-200",
+    caution: "border-amber-500/50 bg-amber-500/10 text-amber-200",
+    go: "border-emerald-500/50 bg-emerald-500/10 text-emerald-200",
+    wait: "border-zinc-700 bg-zinc-900/60 text-zinc-300",
+  };
+
+  return (
+    <section className={`mt-5 rounded-xl border p-5 ${styles[tone]}`}>
+      <div className="text-xs uppercase tracking-wide opacity-70">Right now</div>
+      <div className="mt-1 text-3xl font-bold tracking-tight">{action}</div>
+      <p className="mt-2 text-sm opacity-90">{why}</p>
+      {tone !== "stop" && (
+        <p className="mt-2 text-xs opacity-70">
+          Max risk this trade: {money(r.suggestedMaxRisk)} · daily room {money(r.dailyRemaining)} · buffer {money(r.bufferToFloor)}
+        </p>
+      )}
+    </section>
   );
 }
 
