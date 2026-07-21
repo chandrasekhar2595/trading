@@ -10,6 +10,7 @@ import { getMarketSignal } from "./market-signal";
 import { sendAlert } from "./telegram";
 import { listAccounts } from "./account-snapshot";
 import { searchOpenPositions } from "./topstepx";
+import { ALERTS } from "./alert-config";
 
 let lastDirection: "BUY" | "SELL" | "NEUTRAL" | null = null;
 let closeLongAlerted = false;
@@ -45,12 +46,14 @@ async function mnqHolding(): Promise<{ long: boolean; short: boolean }> {
 export async function checkSignal(): Promise<SignalCheck> {
   const { signal } = await getMarketSignal();
   const dir = signal.direction;
-  const holding = await mnqHolding();
+
+  // Skip the position sweep entirely when no signal alerts are enabled.
+  const holding = ALERTS.signalExit ? await mnqHolding() : { long: false, short: false };
 
   let alerted = false;
 
   // ENTRY alert on a fresh directional flip.
-  if ((dir === "BUY" || dir === "SELL") && dir !== lastDirection) {
+  if (ALERTS.signalEntry && (dir === "BUY" || dir === "SELL") && dir !== lastDirection) {
     const emoji = dir === "BUY" ? "🟢" : "🔴";
     const res = await sendAlert(
       `${emoji} MNQ ${dir} signal (${signal.type})\n${signal.reason}\n` +

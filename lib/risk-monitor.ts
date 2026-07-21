@@ -11,6 +11,7 @@
 import { getSnapshot, listAccounts } from "./account-snapshot";
 import { searchOpenPositions } from "./topstepx";
 import { sendAlert } from "./telegram";
+import { ALERTS } from "./alert-config";
 
 type Level = "breached" | "daily85" | "daily70" | "buffer20" | "buffer35";
 
@@ -70,7 +71,7 @@ export async function checkRisk(): Promise<RiskCheck[]> {
 
       const key = `${a.id}:${level}:${day}`;
       let alerted = false;
-      if (!fired.has(key)) {
+      if (ALERTS.risk && !fired.has(key)) {
         const res = await sendAlert(msg);
         alerted = res.sent > 0;
         if (alerted) fired.add(key);

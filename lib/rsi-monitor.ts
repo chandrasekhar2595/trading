@@ -6,6 +6,7 @@
 import { hasCredentials, retrieveBars, searchContracts } from "./topstepx";
 import { lastTwoRsi } from "./rsi";
 import { sendAlert } from "./telegram";
+import { ALERTS } from "./alert-config";
 
 const SYMBOLS = ["MNQ"];
 const RSI_PERIOD = 13;
@@ -85,7 +86,7 @@ export async function checkRsi(): Promise<{ checkedAt: string; results: SymbolCh
       else if (prevRsi >= OVERSOLD && rsi < OVERSOLD) cross = "oversold";
 
       let alerted = false;
-      if (cross) {
+      if (cross && ALERTS.rsiCross) {
         const msg =
           cross === "overbought"
             ? `🔴 ${symbol} RSI crossed ABOVE 70 (overbought)\nRSI = ${rsi.toFixed(1)} on the 1-minute chart.`
