@@ -10,7 +10,7 @@ const TZ = process.env.TOPSTEP_TZ ?? "America/Chicago";
 
 let cachedContractId: string | null = null;
 
-async function mnqContractId(): Promise<string> {
+export async function mnqContractId(): Promise<string> {
   if (cachedContractId) return cachedContractId;
   try {
     const contracts = await searchContracts("MNQ", false);

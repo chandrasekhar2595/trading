@@ -17,4 +17,6 @@ export const ALERTS = {
   signalExit: on(process.env.ALERTS_SIGNAL_EXIT, false),
   /** Daily loss limit / drawdown / breach. ON: rare, and each one can save the account. */
   risk: on(process.env.ALERTS_RISK, true),
+  /** Range→Change→Execution setups (15m bias + 1m CHoCH + FVG). OFF until backtest says otherwise (npm run backtest:smc). */
+  smc: on(process.env.ALERTS_SMC, false),
 };

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "backtest": "tsx scripts/backtest.mts"
+    "backtest": "tsx scripts/backtest.mts",
+    "backtest:smc": "tsx scripts/backtest-smc.mts"
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.0",
